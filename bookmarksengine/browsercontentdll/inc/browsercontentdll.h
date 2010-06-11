@@ -1,20 +1,23 @@
 /*
 * Copyright (c) 2009 Nokia Corporation and/or its subsidiary(-ies).
 * All rights reserved.
-* This component and the accompanying materials are made available
-* under the terms of "Eclipse Public License v1.0"
-* which accompanies this distribution, and is available
-* at the URL "http://www.eclipse.org/legal/epl-v10.html".
 *
-* Initial Contributors:
-* Nokia Corporation - initial contribution.
+* This program is free software: you can redistribute it and/or modify
+* it under the terms of the GNU Lesser General Public License as published by
+* the Free Software Foundation, version 2.1 of the License.
+* 
+* This program is distributed in the hope that it will be useful,
+* but WITHOUT ANY WARRANTY; without even the implied warranty of
+* MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+* GNU Lesser General Public License for more details.
 *
-* Contributors:
+* You should have received a copy of the GNU Lesser General Public License
+* along with this program.  If not, 
+* see "http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html/".
 *
-* Description: 
+* Description:
 *
 */
-
 #ifndef BROWSERCONTENT_H
 #define BROWSERCONTENT_H
 
@@ -26,8 +29,7 @@
 
 class BrowserContentPrivate;
 
-class BOOKMARKSCONTENTDLL_EXPORT BookmarkLeaf
-{
+class BOOKMARKSCONTENTDLL_EXPORT BookmarkLeaf {
 public:
     QString getUrl(){return url;}
     QString getTitle(){return title;}
@@ -64,8 +66,7 @@ private:
 
 };
 
-class BOOKMARKSCONTENTDLL_EXPORT HistoryLeaf
-{
+class BOOKMARKSCONTENTDLL_EXPORT HistoryLeaf {
 public:
     QString getUrl(){return url;}
     QString getTitle(){return title;}
@@ -98,8 +99,22 @@ private:
    
 };
 
-class BOOKMARKSCONTENTDLL_EXPORT BrowserContent:public QObject
-    {
+class BOOKMARKSCONTENTDLL_EXPORT SuggestData : public QObject
+{
+        Q_OBJECT
+        
+        public:
+            SuggestData(QString pgTitle, QString pgUrl) : m_title(pgTitle), m_url(pgUrl){};
+            Q_PROPERTY(QString title READ pageTitle)
+            Q_PROPERTY(QString url READ pageUrl)
+            
+        private:
+            QString m_title;
+            QString m_url;
+            QString pageTitle() {return m_title;}
+            QString pageUrl() {return m_url;}
+};
+class BOOKMARKSCONTENTDLL_EXPORT BrowserContent:public QObject {
 Q_OBJECT
 BOOKMARKSCLIENT_PRIVATE(BrowserContent)
 public:
@@ -109,13 +124,27 @@ public:
     int AddBookmark(BookmarkLeaf* BookmarkContent);
     int DeleteBookmark(QString title);
     QList<BookmarkLeaf*> FetchAllBookmarks();
+    QList<BookmarkLeaf*> suggestBookMarks(QString atitle);
     int reorderBokmarks(QString title,int new_index);
+	int modifyBookmark(QString aOrgTitle, QString aNewTitle, QString aNewUrl);
+	QObjectList suggestContent(QString atitle);
 
-	int AddHistory(HistoryLeaf* HistoryContent);
-	QList<HistoryLeaf*> FetchHistory();
-	int clearHistory();
+    int AddHistory(HistoryLeaf* HistoryContent);
+    QList<HistoryLeaf*> FetchHistory();
+    QList<HistoryLeaf*> suggestHistory(QString atitle);
+    int clearHistory();
+    int clearBookmarks();
+    QString FetchSerializedBookmarks();
+    void FetchSerializedHistory(QVector<QString> &folderVector,QMap<QString,QString> &mymap);
+    void FetchAllBookmarkTitles(QVector<QString> &title);
 
 private:
-	int createDatabase();
-    };
+  int createDatabase();
+  QString filterUrl(QString atitle);
+  QString findFolderForDate( QDate& nodeDate);
+  bool dateInThisMonth(QDate &date);
+
+private:
+	QObjectList suggestedList;
+};
 #endif //BROWSERCONTENT_H

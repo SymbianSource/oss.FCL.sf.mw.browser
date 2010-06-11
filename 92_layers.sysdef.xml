@@ -7,7 +7,7 @@
     <systemModel>
         <layer name="mw_layer">
             <module name="browser">
-                <unit unitID="browser" mrp="" bldFile="&layer_real_source_path;/" name="browser" proFile="browser.pro" qmakeArgs="" filter=""/>
+                <unit unitID="browser" mrp="" bldFile="&layer_real_source_path;/" name="browser" proFile="browser.pro" qmakeArgs="&quot;browser_addon+=ninetwo&quot;" filter=""/>
             </module>
         </layer>
     </systemModel>
