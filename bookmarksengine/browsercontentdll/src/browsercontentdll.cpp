@@ -75,11 +75,11 @@ int BrowserContent::createDatabase()
     if (tablelist.count() == 0) {
         QSqlQuery query(sqlDB);
         query.exec(
-           "CREATE TABLE BookMarkTable (title VARCHAR(40) NOT NULL,url VARCHAR(100),adate VARCHAR(40),tags VARCHAR(40),rowindex INTEGER, domain VARCHAR(100),CONSTRAINT pk_BookMarkTable PRIMARY KEY(title))");
+           "CREATE TABLE BookMarkTable (title VARCHAR NOT NULL,url VARCHAR,adate VARCHAR,tags VARCHAR,rowindex INTEGER, domain VARCHAR,CONSTRAINT pk_BookMarkTable PRIMARY KEY(title))");
            error=query.lastError();
 
         if (error.type() == QSqlError::NoError) {
-          query.exec("CREATE TABLE HistoryTable (rowindex INTEGER  PRIMARY KEY, title VARCHAR(40) NOT NULL,url VARCHAR(100),adate VARCHAR(40),atime VARCHAR(40), domain VARCHAR(100))");
+            query.exec("CREATE TABLE HistoryTable (rowindex INTEGER  PRIMARY KEY, pageTitle VARCHAR NOT NULL,url VARCHAR,domain VARCHAR, timestamp int)");
           error=query.lastError();
         }                        
     }
@@ -102,7 +102,7 @@ BrowserContent::~BrowserContent()
 /**==============================================================
  * Description: adds the bookmark to the database
  ================================================================*/
-int BrowserContent::AddBookmark(
+int BrowserContent::addBookmark(
         BookmarkLeaf* BookmarkContent)
 {
     BOOKMARKSCLIENT_PRIVATEPTR(BrowserContent);
@@ -145,7 +145,7 @@ int BrowserContent::AddBookmark(
 /**==============================================================
  * Description: deletes the requested bookmark
  ================================================================*/
-int BrowserContent::DeleteBookmark(QString atitle)
+int BrowserContent::deleteBookmark(QString atitle)
 {
     BOOKMARKSCLIENT_PRIVATEPTR(BrowserContent);
     QSqlError error;
@@ -189,7 +189,7 @@ int BrowserContent::DeleteBookmark(QString atitle)
 /**==============================================================
  * Description: fetches Allbookmarks From database
  ================================================================*/
-QList<BookmarkLeaf*> BrowserContent::FetchAllBookmarks()
+QList<BookmarkLeaf*> BrowserContent::fetchAllBookmarks()
 {
     BOOKMARKSCLIENT_PRIVATEPTR(BrowserContent);
     QSqlDatabase db = QSqlDatabase::database(priv->m_connectionName);
@@ -208,7 +208,7 @@ QList<BookmarkLeaf*> BrowserContent::FetchAllBookmarks()
             QString title = query.value(0).toString();
             if(title.contains("'", Qt::CaseInsensitive))
                 title.replace(QString("'"), QString("&#39"));
-      if(title.contains("\"", Qt::CaseInsensitive))
+            if(title.contains("\"", Qt::CaseInsensitive))
                 title.replace(QString("\""), QString("&#34"));
             QString url = query.value(1).toString();
             if(url.contains("'", Qt::CaseInsensitive))
@@ -342,28 +342,28 @@ int BrowserContent::modifyBookmark(QString aOrgTitle, QString aNewTitle, QString
 /**==============================================================
  * Description: adds the bookmark to the database
  ================================================================*/
-int BrowserContent::AddHistory(
+int BrowserContent::addHistory(
         HistoryLeaf* HistoryContent)
 {
     BOOKMARKSCLIENT_PRIVATEPTR(BrowserContent);
     QSqlError error;
     QString title =HistoryContent->getTitle();
     QString url = HistoryContent->getUrl();
-    QString adate =HistoryContent->getDate().toString("dd.MM.yyyy");
-    QString atime = HistoryContent->getLastVisited().toString("h:mm ap");
+    QDateTime dt  = QDateTime::currentDateTime();
+    int timestamp = dt.toTime_t();
 
     QSqlDatabase db = QSqlDatabase::database(priv->m_connectionName);
 
     if (db.isOpen()) {
         QSqlQuery query(db);
-        query.prepare("INSERT INTO HistoryTable (rowindex,title, url, adate, atime, domain) "
-            "VALUES (NULL,:title, :url, :adate, :atime, :domain)");
+
+		query.prepare("INSERT INTO HistoryTable (rowindex,pageTitle, url, domain, timestamp) "
+                       "VALUES (NULL,:title, :url, :domain, :timestamp)");
 
         query.bindValue(":title",  QVariant(title));
         query.bindValue(":url",    QVariant(url));
-        query.bindValue(":adate",  QVariant(adate));
-        query.bindValue(":atime",  QVariant(atime));
         query.bindValue(":domain", QVariant(filterUrl(url)));
+		query.bindValue(":timestamp",  QVariant(timestamp));
         query.exec();
         error = query.lastError();
     }
@@ -379,7 +379,7 @@ int BrowserContent::AddHistory(
 /**==============================================================
  * Description: fetches History From database
  ================================================================*/
-QList<HistoryLeaf*> BrowserContent::FetchHistory()
+QList<HistoryLeaf*> BrowserContent::fetchHistory()
 {
     BOOKMARKSCLIENT_PRIVATEPTR(BrowserContent);
     QSqlDatabase db = QSqlDatabase::database(priv->m_connectionName);
@@ -391,7 +391,7 @@ QList<HistoryLeaf*> BrowserContent::FetchHistory()
     if (dbopen) {
         QSqlQuery query(db);
 
-        query.prepare("SELECT title,url,adate,atime,rowindex FROM HistoryTable ORDER BY rowindex");
+		query.prepare("SELECT pagetitle,url,rowindex,timestamp FROM HistoryTable ORDER BY timestamp ASC");
         query.exec();
         QSqlError error = query.lastError();
 
@@ -400,17 +400,17 @@ QList<HistoryLeaf*> BrowserContent::FetchHistory()
             if(title.contains("\"", Qt::CaseInsensitive))
                 title.replace(QString("\""), QString("&#34"));
             QString url = query.value(1).toString();
-            QString date = query.value(2).toString();
-            QString time = query.value(3).toString();
-            int aIndex=query.value(4).toInt(&ok);
-            HistoryLeaf* node = new HistoryLeaf();
-            QDate adate = QDate::fromString(date, "dd.MM.yyyy");
-            QTime atime = QTime::fromString(time, "h:mm ap");
+			int aIndex=query.value(2).toInt(&ok);
+            uint timest = query.value(3).toUInt();
+            QDateTime dtime=QDateTime::fromTime_t ( timest );
+            QDate adate=dtime.date();
+            QTime atime =dtime.time(); 
+            
+			HistoryLeaf* node = new HistoryLeaf();
             node->setTitle(title);
             node->setUrl(url);
             node->setDate(adate);
             node->setLastVisited(atime);
-//            node->setTag(tag);
             node->setIndex(aIndex);
             nodeslist.append(node);         
         }
@@ -571,7 +571,7 @@ QString BrowserContent::filterUrl(QString atitle){
 /**==============================================================
  * Description: Retrieves the bookmarks and sends it in serialized fashion
  ================================================================*/
-QString BrowserContent::FetchSerializedBookmarks()
+QString BrowserContent::fetchSerializedBookmarks()
     {
     BOOKMARKSCLIENT_PRIVATEPTR(BrowserContent);
     QSqlDatabase db = QSqlDatabase::database(priv->m_connectionName);
@@ -592,7 +592,15 @@ QString BrowserContent::FetchSerializedBookmarks()
         {
 
     QString title = query.value(0).toString();
+	if(title.contains("'", Qt::CaseInsensitive))
+        title.replace(QString("'"), QString("&#39"));
+    if(title.contains("\"", Qt::CaseInsensitive))
+        title.replace(QString("\""), QString("&#34"));
     QString url = query.value(1).toString();
+	if(url.contains("'", Qt::CaseInsensitive))
+        url.replace(QString("'"), QString("&#39"));
+    if(url.contains("\"", Qt::CaseInsensitive))
+        url.replace(QString("\""), QString("&#34"));
     QString date = query.value(2).toString();
     QString tag = query.value(3).toString();
     int aIndex=query.value(4).toInt(&ok);
@@ -613,12 +621,12 @@ QString BrowserContent::FetchSerializedBookmarks()
     }
 
 
+
 /**==============================================================
  * Description: Retrieves the History and sends it in serialized fashion
  ================================================================*/
-void BrowserContent::FetchSerializedHistory(QVector<QString> &folderVector,QMap<QString,QString> &mymap)
-    {
-
+void BrowserContent::fetchSerializedHistory(QVector<QString> &folders,QMap<QString,QString> &historyData)
+{
     BOOKMARKSCLIENT_PRIVATEPTR(BrowserContent);
     QSqlDatabase db = QSqlDatabase::database(priv->m_connectionName);
     QList<HistoryLeaf*> nodeslist;
@@ -627,81 +635,69 @@ void BrowserContent::FetchSerializedHistory(QVector<QString> &folderVector,QMap<
     bool ok;
     QString history = "";
 
-    if (dbopen)
-        {
+    if (!dbopen) {
+		return;
+	}
 
     QSqlQuery query(db);
 
-    query.prepare("SELECT title,url,adate,atime,rowindex FROM HistoryTable ORDER BY rowindex");
+	query.prepare("SELECT pagetitle,url,rowindex,timestamp FROM HistoryTable ORDER BY timestamp ASC");
     query.exec();
     QSqlError error = query.lastError();
-    QString prevtitle="";
     int len=query.numRowsAffected();
-    static int count=1;
-    while (query.next())
-        {
+    
+	while (query.next()) {
+        QString title = query.value(0).toString();
+	    
+		if(title.contains("\"", Qt::CaseInsensitive))
+          title.replace(QString("\""), QString("&#34"));
+        
+		QString url = query.value(1).toString();
+        uint timest = query.value(3).toUInt();
+        QDateTime dtime=QDateTime::fromTime_t ( timest );
+        QDate adate=dtime.date();
+        QTime atime =dtime.time();
+        int aIndex=query.value(4).toInt(&ok);
+       
+		QDate currentDate = QDateTime::currentDateTime().date();
+        int daysToCurrentDate = adate.daysTo(currentDate);
 
-    QString title = query.value(0).toString();
-    QString url = query.value(1).toString();
-    QString date = query.value(2).toString();
-    QString time = query.value(3).toString();
-    int aIndex=query.value(4).toInt(&ok);
-    HistoryLeaf* node = new HistoryLeaf();
-    QDate adate = QDate::fromString(date, "dd.MM.yyyy");
-    QTime atime = QTime::fromString(time, "h:mm ap");
-
-    QString foldertitle=findFolderForDate(adate);
-
-
-    if(folderVector.contains(foldertitle))
-        {
-    mymap[prevtitle].append("\"},");
+        if(daysToCurrentDate < 0) {
+		     continue;
+		}
+		
+        QString foldertitle = findFolderForDate(adate);
+ 
+        if(folders.contains(foldertitle)) {
+    		 historyData[foldertitle].append(",");
+        } else  {
+            folders.append(foldertitle);
+               historyData[foldertitle].append("[");
         }
-    else
-        {
-    folderVector.append(foldertitle);
-    if(count>1)
-        {
-    mymap[prevtitle].append("\"}");
-    mymap[prevtitle].append ("]");
-    mymap[foldertitle].append("[");
-        }
-    else
-        {
-    mymap[foldertitle].append("[");
-        }
-    count++;
-
-
-        }
-
-    prevtitle=foldertitle;
-
-    mymap[foldertitle].append("{");
-    mymap[foldertitle].append("\"titleVal\": \"");
-    mymap[foldertitle].append(title);
-    mymap[foldertitle].append("\", \"dateVal\": \"");
-    mymap[foldertitle].append(adate.toString("dd.MM.yyyy"));
-    mymap[foldertitle].append("\", \"urlVal\": \"");
-    mymap[foldertitle].append(url);
-    mymap[foldertitle].append("\", \"timeVal\": \"");
-    mymap[foldertitle].append(atime.toString("h:mm ap"));
-        }
-    mymap[prevtitle].append("\"}");
-    mymap[prevtitle].append ("]");
-        }
-
+        historyData[foldertitle].append("{");
+        historyData[foldertitle].append("\"titleVal\": \"");
+        historyData[foldertitle].append(title);
+        historyData[foldertitle].append("\", \"dateVal\": \"");
+        historyData[foldertitle].append(adate.toString("dd.MM.yyyy"));
+        historyData[foldertitle].append("\", \"urlVal\": \"");
+        historyData[foldertitle].append(url);
+        historyData[foldertitle].append("\", \"timeVal\": \"");
+        historyData[foldertitle].append(atime.toString("h:mm ap"));
+	    historyData[foldertitle].append("\"}");
     }
+	for (int i = 0; i < folders.size(); ++i) {
+	  historyData[folders[i]].append("]");
+	}
+}
 /**==============================================================
  * Description: Retrieves the bookmark titles and sends it in serialized fashion
  ================================================================*/
-void BrowserContent::FetchAllBookmarkTitles(QVector<QString> &title)
+void BrowserContent::fetchAllBookmarkTitles(QVector<QString> &title)
     {
     BOOKMARKSCLIENT_PRIVATEPTR(BrowserContent);
     QSqlDatabase db = QSqlDatabase::database(priv->m_connectionName);
 
     bool dbopen = db.isOpen();
-    bool ok;
     int i=0;
 
     if(dbopen)
@@ -746,13 +742,13 @@ QString BrowserContent::findFolderForDate( QDate& nodeDate)
 
     //Check if date to belongs to current week folder
     //Should disply the day for the current week
-    if(daysToCurrentDate < 7  &&  currentDayOfWeek > nodeDayOfWeek ){
+    if(daysToCurrentDate > 1 && daysToCurrentDate < 7  &&  currentDayOfWeek > nodeDayOfWeek ){
         
         QString folder = qtTrId("txt_browser_history_this_week");
         return folder;
-    }
+    } 
 
-    if(dateInThisMonth(nodeDate)){
+    if(daysToCurrentDate > 1 && dateInThisMonth(nodeDate)){
         QString folder = qtTrId("txt_browser_history_this_month");
         return folder;
     }
