@@ -121,22 +121,22 @@ public:
 
     BrowserContent(QString aClientName);
     ~BrowserContent();
-    int AddBookmark(BookmarkLeaf* BookmarkContent);
-    int DeleteBookmark(QString title);
-    QList<BookmarkLeaf*> FetchAllBookmarks();
+    int addBookmark(BookmarkLeaf* BookmarkContent);
+    int deleteBookmark(QString title);
+    QList<BookmarkLeaf*> fetchAllBookmarks();
     QList<BookmarkLeaf*> suggestBookMarks(QString atitle);
     int reorderBokmarks(QString title,int new_index);
 	int modifyBookmark(QString aOrgTitle, QString aNewTitle, QString aNewUrl);
 	QObjectList suggestContent(QString atitle);
 
-    int AddHistory(HistoryLeaf* HistoryContent);
-    QList<HistoryLeaf*> FetchHistory();
+    int addHistory(HistoryLeaf* HistoryContent);
+    QList<HistoryLeaf*> fetchHistory();
     QList<HistoryLeaf*> suggestHistory(QString atitle);
     int clearHistory();
     int clearBookmarks();
-    QString FetchSerializedBookmarks();
-    void FetchSerializedHistory(QVector<QString> &folderVector,QMap<QString,QString> &mymap);
-    void FetchAllBookmarkTitles(QVector<QString> &title);
+    QString fetchSerializedBookmarks();
+    void fetchSerializedHistory(QVector<QString> &folderVector,QMap<QString,QString> &mymap);
+    void fetchAllBookmarkTitles(QVector<QString> &title);
 
 private:
   int createDatabase();

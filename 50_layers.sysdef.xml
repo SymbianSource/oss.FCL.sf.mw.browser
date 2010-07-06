@@ -7,7 +7,7 @@
     <systemModel>
         <layer name="mw_layer">
             <module name="browser">
-                <unit unitID="browser" mrp="" bldFile="&layer_real_source_path;/" name="browser" proFile="browser.pro" qmakeArgs="&quot;browser_addon+=fivezero&quot;" filter=""/>
+                <unit unitID="browser" mrp="" bldFile="&layer_real_source_path;/" name="browser" proFile="browser.pro" qmakeArgs="&quot;CONFIG+=release&quot; &quot;CONFIG-=debug&quot; &quot;browser_addon+=fivezero&quot;" filter=""/>
             </module>
         </layer>
     </systemModel>
