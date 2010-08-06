@@ -25,7 +25,9 @@
 #include<QSqlQuery>
 #include<QSqlError>
 #include<QDebug>
+
 const QString dbLocation="browserContent.db";
+
 
 class BrowserContentPrivate {
 BOOKMARKSCLIENT_PUBLIC(BrowserContent)
@@ -68,7 +70,6 @@ int BrowserContent::createDatabase()
     if (!sqlDB.open())
         return -1;
     QSqlError error;
-    int  err = ErrGeneral;
 
     //Check if the table exists, create table only when it's empty 
     QStringList tablelist = sqlDB.tables(QSql::Tables);
@@ -518,12 +519,11 @@ QObjectList BrowserContent::suggestContent(QString atitle){
     if(atitle.contains("'", Qt::CaseInsensitive))
       atitle.replace(QString("'"), QString("''"));
  
-    QString queryStatement = "SELECT title,url,1 FROM HistoryTable WHERE title LIKE '%" + atitle + "%' OR url LIKE '%" + atitle + "%'" +
-                             " UNION " +
-                             "SELECT title,url,2 FROM BookMarkTable WHERE title LIKE '%" + atitle + "%' OR url LIKE '%" + atitle + "%'" +
-							 "ORDER BY 3";
-							 
-        
+    QString queryStatement = "SELECT pageTitle,url,1 FROM HistoryTable WHERE pagetitle LIKE '%" + atitle + "%' OR url LIKE '%" + atitle + "%' "+
+    						 " UNION "+
+    						 "SELECT title,url,2 FROM BookMarkTable WHERE title LIKE '%"+atitle+"%' OR url LIKE '%" + atitle + "%'"+
+    						 " ORDER BY 3";
+         
         query.prepare(queryStatement);
         query.exec();
         QSqlError error = query.lastError();
@@ -630,7 +630,6 @@ void BrowserContent::fetchSerializedHistory(QVector<QString> &folders,QMap<QStri
     BOOKMARKSCLIENT_PRIVATEPTR(BrowserContent);
     QSqlDatabase db = QSqlDatabase::database(priv->m_connectionName);
     QList<HistoryLeaf*> nodeslist;
-    int i=0;
     bool dbopen = db.isOpen();
     bool ok;
     QString history = "";
@@ -698,7 +697,6 @@ void BrowserContent::fetchAllBookmarkTitles(QVector<QString> &title)
     QSqlDatabase db = QSqlDatabase::database(priv->m_connectionName);
 
     bool dbopen = db.isOpen();
-    int i=0;
 
     if(dbopen)
         {
