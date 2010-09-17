@@ -102,3 +102,6 @@ symbian: {
     DEPLOYMENT += browsercontentdlllibs
  
 }
+
+
+symbian:MMP_RULES += SMPSAFE

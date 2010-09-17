@@ -90,3 +90,6 @@ symbian: {
 symbian: {
     INCLUDEPATH +=  $$PWD $$MW_LAYER_SYSTEMINCLUDE $$APP_LAYER_SYSTEMINCLUDE
 }
+
+
+symbian:MMP_RULES += SMPSAFE

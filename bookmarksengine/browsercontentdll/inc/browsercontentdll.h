@@ -27,6 +27,8 @@
 #include<QtGui>
 
 
+static const char KDOUBLEQUOTE[]       = "&#34";
+static const char KBACKSLASH[]         = "&#92";
 class BrowserContentPrivate;
 
 class BOOKMARKSCONTENTDLL_EXPORT BookmarkLeaf {

@@ -106,3 +106,6 @@ symbian: {
     DEPLOYMENT += BookMarksClientlibs
  
 }
+
+
+symbian:MMP_RULES += SMPSAFE

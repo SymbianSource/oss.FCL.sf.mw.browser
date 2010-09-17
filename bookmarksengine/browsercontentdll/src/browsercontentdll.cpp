@@ -400,7 +400,13 @@ QList<HistoryLeaf*> BrowserContent::fetchHistory()
             QString title = query.value(0).toString();
             if(title.contains("\"", Qt::CaseInsensitive))
                 title.replace(QString("\""), QString("&#34"));
+            //--Encoding backslash used in title--
+            if(title.contains("\\", Qt::CaseInsensitive))
+                title.replace(QString("\\"), QString(KBACKSLASH));
             QString url = query.value(1).toString();
+            //--Encoding doublequote used in title--
+            if(url.contains("\"", Qt::CaseInsensitive))
+                url.replace(QString("\""), QString(KDOUBLEQUOTE));
 			int aIndex=query.value(2).toInt(&ok);
             uint timest = query.value(3).toUInt();
             QDateTime dtime=QDateTime::fromTime_t ( timest );
@@ -650,8 +656,13 @@ void BrowserContent::fetchSerializedHistory(QVector<QString> &folders,QMap<QStri
 	    
 		if(title.contains("\"", Qt::CaseInsensitive))
           title.replace(QString("\""), QString("&#34"));
+		if(title.contains("\\", Qt::CaseInsensitive))
+            title.replace(QString("\\"), QString(KBACKSLASH));
         
 		QString url = query.value(1).toString();
+		//--Encoding URL--
+        QUrl url1(url);
+        url = QString::fromUtf8(url1.toEncoded());
         uint timest = query.value(3).toUInt();
         QDateTime dtime=QDateTime::fromTime_t ( timest );
         QDate adate=dtime.date();
