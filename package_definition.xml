@@ -5,6 +5,9 @@
     <component id="bookmarksengine_build" name="Bookmarks Engine Build" introduced="^4" filter="s60">
       <unit bldFile="bookmarksengine" qt:proFile="bookmarksengine.pro"/>
     </component>
+    <component id="bookmarks_build" name="Bookmarks Build" introduced="^4" filter="s60">
+      <unit bldFile="bookmarks" qt:proFile="bookmarks.pro"/>
+    </component>        
   </collection>
  </package>
 </SystemDefinition>
