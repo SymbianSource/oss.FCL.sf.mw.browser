@@ -157,25 +157,48 @@ int BookmarksManager::addBookmark(QString title, QString URL)
         // do some checking on parameters
         QString updatedTitle = title;
         QString updatedUrl = normalizeUrl(URL);
+        int soIndex = 1;
         if (title.isEmpty()) {
             updatedTitle = "Untitled";
         }
         if (m_db.isOpen()) {
             QSqlQuery query(m_db);
-            query.prepare("INSERT INTO bookmarks (title, url, sortIndex)"
-                   "select :title, :url, ifnull(max(sortIndex)+1,1) from bookmarks");
+            m_db.transaction();
+            if (!query.exec("SELECT count(*) from bookmarks")) {
+                lastErrMsg(query);
+                m_db.rollback();
+                return DATABASEERROR;
+            }
+            if(query.next()) {
+                query.prepare("UPDATE bookmarks SET sortIndex=sortIndex+1 WHERE sortIndex >= :sIndex");
+                query.bindValue(":sIndex", soIndex);
+                if (!query.exec()) {
+                    lastErrMsg(query);
+                    m_db.rollback();
+                    return DATABASEERROR;
+                 }
+           } 
+           query.prepare("INSERT INTO bookmarks (title, url, sortIndex) "
+                               "VALUES (:title, :url, :sIndex)");
             query.bindValue(":title", QVariant(updatedTitle));
             query.bindValue(":url",    QVariant(updatedUrl));
+            query.bindValue(":sIndex",  QVariant(soIndex));
             if (!query.exec()) {
                 lastErrMsg(query);
+                m_db.rollback();
                 return DATABASEERROR;
            }
            // Note: lastInsertId() is not thread-safe
             bookmarkId = query.lastInsertId().toInt();
+            if (!m_db.commit()) {
+                qDebug() << m_db.lastError().text();
+                m_db.rollback();
+               return DATABASEERROR;
+            }
         } else {
             bookmarkId = FAILURE;
         }
-    }
+      }
     return bookmarkId;
 }
 
@@ -650,6 +673,31 @@ BookmarkFav* BookmarksManager::findBookmark(int bookmarkId)
         }
     }
     return results;
+}
+
+/**==============================================================
+ * Description: Finds a bookmark based on a given bookmarkID.
+ * Returns: A pointer to BookmarkFav object or NULL.
+ ===============================================================*/
+QMap<QString, QString> BookmarksManager::findBookmarks(QString atitle)
+{      
+    QMap<QString, QString> map;
+    
+    if (m_db.isOpen()) { 
+        QSqlQuery query(m_db);    
+        QString queryStatement = "SELECT url, title FROM bookmarks WHERE title LIKE '%"+atitle+"%' OR url LIKE '%" + atitle + "%'";          
+        query.prepare(queryStatement);
+        if(query.exec()) {    
+           while (query.next()){
+              QString bookmarkUrl = query.value(0).toString();
+              QString bookmarkTitle =   query.value(1).toString();
+              map.insert( bookmarkUrl, bookmarkTitle );
+           }
+        } else {
+            lastErrMsg(query); 
+        }
+    }
+    return map;
 }
 
 /**==============================================================

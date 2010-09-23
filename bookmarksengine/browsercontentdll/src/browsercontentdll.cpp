@@ -784,3 +784,28 @@ bool BrowserContent::dateInThisMonth(QDate &date)
     return false;  
    
 }
+
+QMap<QString, QString> BrowserContent::findSimilarHistoryItems(QString atitle)
+{
+    BOOKMARKSCLIENT_PRIVATEPTR(BrowserContent);
+    QSqlDatabase db = QSqlDatabase::database(priv->m_connectionName);
+    
+    QMap<QString, QString> map;
+    
+    if (db.isOpen()){
+        QSqlQuery query(db);
+        
+        QString queryStatement = "SELECT url, pageTitle FROM HistoryTable WHERE pageTitle LIKE '%"+atitle+"%' OR url LIKE '%" + atitle + "%'";          
+        query.prepare(queryStatement);
+        if(query.exec()) {    
+            while (query.next()){
+                 QString HistoryUrl = query.value(0).toString();
+                 QString HistoryTitle =   query.value(1).toString();
+                 map.insert( HistoryUrl, HistoryTitle );
+             }
+        } else {
+            QSqlError error = query.lastError();
+        }
+    }
+    return map;
+}    

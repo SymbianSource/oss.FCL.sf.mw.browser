@@ -25,6 +25,7 @@
 #include <QObject>
 #include <QSqlDatabase>
 #include <QSqlError>
+#include <QMap>
 
 #include "bookmarksapi.h"
 class QWidget;
@@ -65,7 +66,8 @@ public slots:
     BookmarkResults *findUntaggedBookmarks();
     int reorderBookmark(int bookmarkID, int newIndex);
     TagResults* findTagsByBookmark(int bookmarkID);
-    
+		QMap<QString, QString> findBookmarks(QString atitle);   
+ 
  private:
     bool doQuery(QString query);
     void createBookmarksSchema();

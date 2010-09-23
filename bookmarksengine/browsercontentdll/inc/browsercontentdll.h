@@ -139,6 +139,7 @@ public:
     QString fetchSerializedBookmarks();
     void fetchSerializedHistory(QVector<QString> &folderVector,QMap<QString,QString> &mymap);
     void fetchAllBookmarkTitles(QVector<QString> &title);
+    QMap<QString, QString> findSimilarHistoryItems(QString atitle);
 
 private:
   int createDatabase();
