@@ -8,6 +8,9 @@
     <component id="bookmarks_build" name="Bookmarks Build" introduced="^4" filter="s60">
       <unit bldFile="bookmarks" qt:proFile="bookmarks.pro"/>
     </component>        
+    <component id="browserrfsplugin_build" name="Browserrfsplugin Build" introduced="^4" filter="s60">
+      <unit bldFile="browserrfsplugin" qt:proFile="browserrfsplugin.pro"/>
+    </component>            
   </collection>
  </package>
 </SystemDefinition>
