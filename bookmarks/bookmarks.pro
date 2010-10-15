@@ -24,7 +24,18 @@ QT += core \
 
 # HEADERS += $$PWD/inc/browsercontentdllclientdefs.h \
 # $$PWD/inc/browsercontentdll.h
-# SOURCES += $$PWD/src/browsercontentdll.cpp
+# SOURCES += $$PWD/src/browsercontentdll.cpp    
+
+# Build.inf rules
+symbian{
+		BLD_INF_RULES.prj_exports += \
+    "$${LITERAL_HASH}include <platform_paths.hrh>" \
+    "conf/CI_bookmarks.confml MW_LAYER_CONFML(CI_bookmarks.confml)" \
+    "conf/BookmarkItems.gcfml MW_LAYER_GCFML(BookmarkItems.gcfml)" \
+    "conf/CI_bookmarks.confml MW_LAYER_CONFML(BookmarkData.confml)" \
+    "conf/bookmarks.xml /epoc32/data/z/private/10008d39/bookmarks.xml"
+}
+
 isEmpty(BEDROCK_OUTPUT_DIR): { 
     symbian { 
         CONFIG(release, debug|release):BOOKMARKSAPI_OUTPUT_DIR = $$PWD/../../WrtBuild/Release
@@ -77,8 +88,7 @@ symbian: {
     TARGET.EPOCALLOWDLLDATA = 1
     TARGET.CAPABILITY = All \
         -TCB \
-        -DRM \
-        -AllFiles
+        -DRM 
     LIBS += -lefsrv \
         -lcaf \
         -lcafutils
@@ -86,10 +96,15 @@ symbian: {
         $$MW_LAYER_PUBLIC_EXPORT_PATH()
     INCLUDEPATH += $$MW_LAYER_SYSTEMINCLUDE
     INCLUDEPATH += /epoc32/include
-    bookmarksapi.sources = bookmarksapi.dll
-    bookmarksapi.path = /sys/bin
-    DEPLOYMENT += bookmarksapi
-}
+    
+    BLD_INF_RULES.prj_exports += \
+        "./BookmarksManager.h               $$MW_LAYER_PUBLIC_EXPORT_PATH(BookmarksManager.h)" \
+        "./BookmarkFav.h                   $$MW_LAYER_PUBLIC_EXPORT_PATH(BookmarkFav.h)" \
+        "./BookmarkResults.h               $$MW_LAYER_PUBLIC_EXPORT_PATH(BookmarkResults.h)" \
+        "./bookmarksapi.h                  $$MW_LAYER_PUBLIC_EXPORT_PATH(bookmarksapi.h)" \
+        "./TagResults.h                    $$MW_LAYER_PUBLIC_EXPORT_PATH(TagResults.h)" 
+}  
+
 HEADERS = \
 #BookmarkResultsList.h \
     TagResults.h \

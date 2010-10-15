@@ -96,14 +96,11 @@ symbian: {
     TARGET.UID3 = 0x200267E6
     TARGET.VID = VID_DEFAULT
     TARGET.EPOCALLOWDLLDATA=1
-    TARGET.CAPABILITY = All -TCB -DRM -AllFiles
+    TARGET.CAPABILITY = All -TCB -DRM
     LIBS += -lefsrv -lcaf -lcafutils
     INCLUDEPATH+=$$MW_LAYER_PUBLIC_EXPORT_PATH(cwrt) $$MW_LAYER_PUBLIC_EXPORT_PATH()
     INCLUDEPATH += $$MW_LAYER_SYSTEMINCLUDE
     INCLUDEPATH+=/epoc32/include
-    BookMarksClientlibs.sources = BookMarksClient.dll
-    BookMarksClientlibs.path = /sys/bin
-    DEPLOYMENT += BookMarksClientlibs
  
 }
 

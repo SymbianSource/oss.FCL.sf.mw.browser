@@ -47,25 +47,32 @@ BrowserContentPrivate::~BrowserContentPrivate()
 /**==============================================================
  * Description: Constructor of BrowserContent
  ================================================================*/
-BrowserContent::BrowserContent(QString aClientName)
+BrowserContent::BrowserContent(QString aClientName)  //used for test purposes only
 {
     BOOKMARKSCLIENT_INITIALIZE(BrowserContent);
     
     priv->m_connectionName=aClientName;
-    createDatabase();
+    createDatabase(dbLocation);
+}
+
+BrowserContent::BrowserContent(QString aClientName, QString databaseName)
+{
+    BOOKMARKSCLIENT_INITIALIZE(BrowserContent);
+
+    priv->m_connectionName=aClientName;
+    createDatabase(databaseName);
 }
 
 /**==============================================================
  * Description: creates the database
  ================================================================*/
-int BrowserContent::createDatabase()
+int BrowserContent::createDatabase(QString name)
 {
     BOOKMARKSCLIENT_PRIVATEPTR(BrowserContent);
     
     QSqlDatabase sqlDB = QSqlDatabase::addDatabase("QSQLITE", priv->m_connectionName);
     sqlDB.setHostName("Simulator");
-    sqlDB.setDatabaseName(dbLocation);
-
+    sqlDB.setDatabaseName(name);
 
     if (!sqlDB.open())
         return -1;
@@ -100,91 +107,6 @@ BrowserContent::~BrowserContent()
     {
     }
 
-/**==============================================================
- * Description: adds the bookmark to the database
- ================================================================*/
-int BrowserContent::addBookmark(
-        BookmarkLeaf* BookmarkContent)
-{
-    BOOKMARKSCLIENT_PRIVATEPTR(BrowserContent);
-    QSqlError error;
-    QString title =BookmarkContent->getTitle();
-    QString url = BookmarkContent->getUrl();
-    QString adate =BookmarkContent->getDate().toString("dd.MM.yyyy"); 
-    QString tags = BookmarkContent->getTag();
-    int aIndex=BookmarkContent->getIndex();
-    QSqlDatabase db = QSqlDatabase::database(priv->m_connectionName);
-
-    if (db.isOpen()) {
-        QSqlQuery query(db);
-        query.prepare("UPDATE BookMarkTable SET rowindex=rowindex+1 WHERE rowindex>=:aIndex");
-        query.bindValue(":aIndex", aIndex);
-        query.exec();
-        error = query.lastError();
-    
-        query.prepare("INSERT INTO BookMarkTable (title, url, adate, tags, rowindex, domain) "
-            "VALUES (:title, :url, :adate, :tags, :aIndex, :domain)");
-
-        query.bindValue(":title",   QVariant(title));
-        query.bindValue(":url",     QVariant(url));
-        query.bindValue(":adate",   QVariant(adate));
-        query.bindValue(":tags",    QVariant(tags));
-        query.bindValue(":rowindex",QVariant(aIndex));
-        query.bindValue(":domain",  QVariant(filterUrl(url)));
-
-        query.exec();
-        error = query.lastError();
-    }
-
-    if (error.type() == QSqlError::NoError) {
-        return ErrNone;
-    } else {
-        return ErrGeneral;
-    }
-}
-
-/**==============================================================
- * Description: deletes the requested bookmark
- ================================================================*/
-int BrowserContent::deleteBookmark(QString atitle)
-{
-    BOOKMARKSCLIENT_PRIVATEPTR(BrowserContent);
-    QSqlError error;
-    QString title = atitle;
-    QSqlDatabase db = QSqlDatabase::database(priv->m_connectionName);
-    bool ok;
-    if (db.isOpen()) {
-        QSqlQuery query(db);
-    
-        if(atitle.contains("'", Qt::CaseInsensitive))
-            atitle.replace(QString("'"), QString("''"));
-
-        query.prepare("SELECT title,url,adate,tags,rowindex FROM BookMarkTable WHERE title=:title");
-        query.bindValue(":title", title);
-        query.exec();
-        error = query.lastError();
-        query.next();
-        int aIndex=query.value(4).toInt(&ok);
-
-        query.prepare("DELETE FROM BookMarkTable WHERE title=:title");
-        query.bindValue(":title", title);
-        query.exec();
-        error = query.lastError();
-        if (error.type() == QSqlError::NoError) {
-            query.prepare("UPDATE BookMarkTable set rowindex=rowindex-1 WHERE rowindex>:aIndex");
-            query.bindValue(":aIndex", aIndex);
-            query.exec();
-            error = query.lastError();
-        }
-    }
-        
-    if (error.type() == QSqlError::NoError) {
-        return ErrNone;
-    } else {
-        return ErrGeneral;
-    }
-
-}
 
 
 /**==============================================================
@@ -195,7 +117,7 @@ QList<BookmarkLeaf*> BrowserContent::fetchAllBookmarks()
     BOOKMARKSCLIENT_PRIVATEPTR(BrowserContent);
     QSqlDatabase db = QSqlDatabase::database(priv->m_connectionName);
     QList<BookmarkLeaf*> nodeslist;
-    
+        
     bool dbopen = db.isOpen();
     bool ok;
     
@@ -260,85 +182,6 @@ QList<BookmarkLeaf*> BrowserContent::suggestBookMarks(QString atitle)
     return nodeslist;
 }
 
-/**==============================================================
- * Description: Reoders the Bokmarks based on index
- ================================================================*/
-int BrowserContent::reorderBokmarks(QString title,int new_index)
-{
-    BOOKMARKSCLIENT_PRIVATEPTR(BrowserContent);
-    QSqlDatabase db = QSqlDatabase::database(priv->m_connectionName);
-    QSqlQuery query(db);
-    QSqlError error;
-    bool ok;
-    
-    if(title.contains("'", Qt::CaseInsensitive))
-      title.replace(QString("'"), QString("''"));
-
-    query.prepare("SELECT title,url,adate,tags,rowindex FROM BookMarkTable WHERE title=:title");
-    query.bindValue(":title", title);
-    query.exec();
-    error = query.lastError();
-    query.next();
-    int old_index=query.value(4).toInt(&ok);
-
-    if(old_index>new_index) {
-          //Moving the item UP
-          query.prepare("UPDATE BookMarkTable set rowindex=rowindex+1 WHERE rowindex BETWEEN :new_index AND :old_index-1");
-    } else if(old_index<new_index) {
-         //Moving items Down
-         query.prepare("UPDATE BookMarkTable set rowindex=rowindex-1 WHERE rowindex BETWEEN :old_index+1 AND :new_index");
-    }
-    
-    query.bindValue(":old_index", old_index);
-    query.bindValue(":new_index", new_index);
-    //Moving items Down
-     query.exec();
-     error= query.lastError();
-
-    if (error.type() == QSqlError::NoError) {
-        query.prepare("UPDATE BookMarkTable set rowindex=:new_index WHERE title=:title");
-        query.bindValue(":title", title);
-        query.bindValue(":new_index", new_index);
-        query.exec();
-        error = query.lastError();
-    }
-
-    if (error.type() == QSqlError::NoError) {
-        //No error
-        return ErrNone;
-    }  else {
-        return ErrGeneral;
-    }
-}
-
-
-/**==============================================================
- * Description: modify the requested bookmark
- ================================================================*/
-int BrowserContent::modifyBookmark(QString aOrgTitle, QString aNewTitle, QString aNewUrl)
-{
-    BOOKMARKSCLIENT_PRIVATEPTR(BrowserContent);
-    QSqlError error;
-    QSqlDatabase db = QSqlDatabase::database(priv->m_connectionName);
-   
-    if (db.isOpen()) {
-        QSqlQuery query(db);
-        query.prepare("UPDATE BookMarkTable set title=:aNewTitle, url=:aNewUrl, domain=:aNewDomain WHERE title=:aOrgTitle");
-        query.bindValue(":aNewTitle", aNewTitle);
-        query.bindValue(":aNewUrl", aNewUrl);
-        query.bindValue(":aNewDomain", filterUrl(aNewUrl));
-        query.bindValue(":aOrgTitle", aOrgTitle);
-        query.exec();
-        error = query.lastError();
-    }
-
-    if (error.type() == QSqlError::NoError) {
-        return ErrNone;
-    } else {
-        return ErrGeneral;
-    }
-}
-
 
 /**==============================================================
  * Description: adds the bookmark to the database
@@ -358,15 +201,45 @@ int BrowserContent::addHistory(
     if (db.isOpen()) {
         QSqlQuery query(db);
 
-		query.prepare("INSERT INTO HistoryTable (rowindex,pageTitle, url, domain, timestamp) "
+       #ifdef Q_WS_MAEMO_5
+		// Update timestamp on existing entries that have the same URL and title and were time-stamped
+        // within the last 24 hours.  Normally there will only one of these entries.
+        query.prepare(QString("UPDATE HistoryTable "
+                              "SET timestamp=%1 "
+                              "WHERE timestamp>%2 AND url='%3' AND pageTitle='%4'")
+                      .arg(timestamp)
+                      .arg(timestamp - (60 * 60 * 24))
+                      .arg(url)
+                      .arg(title));
+        query.exec();
+        //qDebug() << "==" << __PRETTY_FUNCTION__ << query.executedQuery() << query.numRowsAffected() << query.lastError();
+
+        if(query.numRowsAffected() == 0)
+        {
+            // No recent duplicates found, create a new entry.
+            query.clear();
+            query.prepare("INSERT INTO HistoryTable (rowindex,pageTitle, url, domain, timestamp) "
+                           "VALUES (NULL,:title, :url, :domain, :timestamp)");
+
+            query.bindValue(":title",  QVariant(title));
+            query.bindValue(":url",    QVariant(url));
+            query.bindValue(":domain", QVariant(filterUrl(url)));
+            query.bindValue(":timestamp",  QVariant(timestamp));
+            query.exec();
+            //qDebug() << "==" << __PRETTY_FUNCTION__ << query.executedQuery() << query.lastError();
+            error = query.lastError();
+        }
+        #else
+        query.prepare("INSERT INTO HistoryTable (rowindex,pageTitle, url, domain, timestamp) "
                        "VALUES (NULL,:title, :url, :domain, :timestamp)");
 
         query.bindValue(":title",  QVariant(title));
         query.bindValue(":url",    QVariant(url));
         query.bindValue(":domain", QVariant(filterUrl(url)));
-		query.bindValue(":timestamp",  QVariant(timestamp));
+				query.bindValue(":timestamp",  QVariant(timestamp));
         query.exec();
         error = query.lastError();
+        #endif
     }
 
     if (error.type() == QSqlError::NoError) {
@@ -809,3 +682,4 @@ QMap<QString, QString> BrowserContent::findSimilarHistoryItems(QString atitle)
     }
     return map;
 }    
+    

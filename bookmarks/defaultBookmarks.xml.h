@@ -10,8 +10,8 @@
 
 #include "bookmarksapi.h"
 
-extern const QString defaultBookmarksList = "<!DOCTYPE xbel>\n\
-<xbel version='1.0'>\n\
+extern const QString defaultBookmarksList = "<!DOCTYPE xbel> \n\
+   <xbel version='1.0'>\n\
    <bookmark href='http://www.nokia.com'>\n\
        <title>Nokia</title>\n\
            <info>\n\

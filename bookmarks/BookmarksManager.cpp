@@ -1,34 +1,34 @@
 /*
-* Copyright (c) 2009 Nokia Corporation and/or its subsidiary(-ies).
-* All rights reserved.
-*
-* This program is free software: you can redistribute it and/or modify
-* it under the terms of the GNU Lesser General Public License as published by
-* the Free Software Foundation, version 2.1 of the License.
-* 
-* This program is distributed in the hope that it will be useful,
-* but WITHOUT ANY WARRANTY; without even the implied warranty of
-* MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-* GNU Lesser General Public License for more details.
-*
-* You should have received a copy of the GNU Lesser General Public License
-* along with this program.  If not, 
-* see "http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html/".
-*
-* Description: This implements the bookmarks API's.
-*
-*/
+ * Copyright (c) 2009 Nokia Corporation and/or its subsidiary(-ies).
+ * All rights reserved.
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU Lesser General Public License as published by
+ * the Free Software Foundation, version 2.1 of the License.
+ * 
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU Lesser General Public License for more details.
+ *
+ * You should have received a copy of the GNU Lesser General Public License
+ * along with this program.  If not, 
+ * see "http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html/".
+ *
+ * Description: This implements the bookmarks API's.
+ *
+ */
 
 #include<QString>
 #include<QFile>
 #include<QFileInfo>
 #include<QDebug>
-#include<QSqlDatabase>
 #include<QSqlQuery>
 #include<QSqlError>
 #include<QWidget>
 #include<QtGui>
 
+#include "../../../app/browserui/bedrockProvisioning/bedrockprovisioning.h"
 #include "bookmarksapi.h"
 #include "BookmarksManager.h"
 #include "BookmarkFav.h"
@@ -38,10 +38,32 @@
 #include "xbelwriter.h"
 #include "defaultBookmarks.xml.h"
 
+namespace 
+{
+    const QString BOOKMARK_IMPORT_FILENAME = "bookmarks.xml";
+    const QString DEFAULT_BOOKMARKS_IMPORT_FILENAME = "defaultBookmarks.xml";
+    const QString TAGS_TABLE_NAME = "tags";
+    const QString BOOKMARKS_TABLE_NAME = "bookmarks";
+}
+
+BookmarksManager* BookmarksManager::instance() 
+{
+    static BookmarksManager* s_instance;
+    if(!s_instance) {
+        s_instance = new BookmarksManager();
+        if(s_instance->needsImport())
+            s_instance->importDefaultBookmarks();
+    }
+    Q_ASSERT(s_instance);
+    return s_instance;    
+}
+
 BookmarksManager::BookmarksManager(QWidget *parent) :
     QObject(parent)
 {
     setObjectName("bookmarksManager");
+    
+    m_needsImport = false;
 
     m_db = QSqlDatabase::database(BOOKMARKS_DB_NAME);
     if (!m_db.isValid()) {
@@ -51,13 +73,55 @@ BookmarksManager::BookmarksManager(QWidget *parent) :
     if (m_db.open()) {
         // TODO: Do we need a flag so that this gets called only once OR when
         // creating a database tables "IF NOT EXISTS" is good enough
-        createBookmarksSchema();
+        if(!doesTableExist(BOOKMARKS_TABLE_NAME) || !doesTableExist(TAGS_TABLE_NAME)) {
+            createBookmarksSchema();
+            m_needsImport = true;
+        }
     }
 }
 
-BookmarksManager::~BookmarksManager() {
+BookmarksManager::~BookmarksManager()
+{
     m_db.close();
     QSqlDatabase::removeDatabase(BOOKMARKS_DB_NAME);
+}
+
+bool BookmarksManager::createFile(QString filename, QString fileContents) 
+{
+    QFile file(filename);
+    
+    if(file.exists())
+        file.remove();
+    if (!file.open(QIODevice::WriteOnly | QIODevice::Text))
+        return false;
+
+    QTextStream out(&file); 
+    out << fileContents;
+    file.flush();
+    file.close();
+    return file.exists();
+}
+
+void BookmarksManager::deleteFile(QString filename) {
+    QFile::remove(filename);   
+}
+
+bool BookmarksManager::doesTableExist(QString tableName)
+{
+    bool retVal = false;
+    
+    if (!m_db.isValid() || !m_db.isOpen())
+        return false;
+    
+    QSqlQuery query(m_db);
+    query.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name=:tableName");
+    query.bindValue(":tableName", QVariant(tableName));
+    if (query.exec()) {
+        if (query.next()) 
+            retVal = true;
+        query.finish();
+    }
+    return retVal;
 }
 
 /*
@@ -65,18 +129,20 @@ BookmarksManager::~BookmarksManager() {
  * |Bookmarks(ID)|* <-> *|Tags(BMID)|
  * +-------------+       +----------+
  */
-void BookmarksManager::createBookmarksSchema() {
+void BookmarksManager::createBookmarksSchema()
+{
     // Bookmarks
     if (!doQuery("CREATE TABLE IF NOT EXISTS bookmarks("
-                    "id INTEGER PRIMARY KEY,"
-                    "title text, "
-                    "url text,"
-                    "sortIndex int DEFAULT 0)")) {
+        "id INTEGER PRIMARY KEY,"
+        "title text, "
+        "url text,"
+        "sortIndex int DEFAULT 0)")) {
         // TODO: do some error handling here!
         return;
     }
     // Make sorting faster
-    if (!doQuery("CREATE INDEX IF NOT EXISTS bm_sort_idx ON bookmarks(sortIndex ASC)")) {
+    if (!doQuery(
+            "CREATE INDEX IF NOT EXISTS bm_sort_idx ON bookmarks(sortIndex ASC)")) {
         // TODO: do some error handling here!
         return;
     }
@@ -90,9 +156,9 @@ void BookmarksManager::createBookmarksSchema() {
     // Note: foreign key constraints are not enforced in the current version of sqlite
     // that we are using.
     if (!doQuery("CREATE TABLE IF NOT EXISTS tags("
-                    "bmid INTEGER,"
-                    "tag text,"
-                    "FOREIGN KEY(bmid) REFERENCES bookmarks(id))")) {
+        "bmid INTEGER,"
+        "tag text,"
+        "FOREIGN KEY(bmid) REFERENCES bookmarks(id))")) {
         // TODO: do some error handling here!
         return;
     }
@@ -107,8 +173,32 @@ void BookmarksManager::createBookmarksSchema() {
     }
 }
 
+int BookmarksManager::importDefaultBookmarks() 
+{
+    int success = FAILURE;
+    // TODO: When Jira Task BR-4939 (https://qtrequirements.europe.nokia.com/browse/BR-4939) is
+    // finished, refactor this to get the path of the bookmarks.xml from that service.   
+    //QString bookmarksFilename = BEDROCK_PROVISIONING::BedrockProvisioning::createBedrockProvisioning()->valueAsString("DataBaseDirectory"); 
+    
+    if(QFile::exists(QString("z:/private/10008d39/").append(BOOKMARK_IMPORT_FILENAME))) {
+        success = importBookmarks(QString("z:/private/10008d39/").append(BOOKMARK_IMPORT_FILENAME));
+        qDebug() << "Import of bookmarks.xml " << (success == SUCCESS ? "successful." : "failed.");
+    } else if (QFile::exists(QString("c:/private/10008d39/").append(BOOKMARK_IMPORT_FILENAME))) {
+        success = importBookmarks(QString("c:/private/10008d39/").append(BOOKMARK_IMPORT_FILENAME));
+        qDebug() << "Import of bookmarks.xml " << (success == SUCCESS ? "successful." : "failed.");
+    } else if(createFile(DEFAULT_BOOKMARKS_IMPORT_FILENAME, defaultBookmarksList)) {        
+        success = importBookmarks(DEFAULT_BOOKMARKS_IMPORT_FILENAME);
+        qDebug() << "bookmarks.xml not found. Import of defaultBookmarks.xml " << 
+            (success == SUCCESS ? "successful." : "failed.");
+    } else {
+        qDebug() << "Could not import factory or default bookmarks.";
+    }
+    return success; 
+}
+
 // TODO refactor this - nothing except the schema creation can use it as is
-bool BookmarksManager::doQuery(QString query) {
+bool BookmarksManager::doQuery(QString query)
+{
 #ifdef ENABLE_PERF_TRACE
     PERF_DEBUG() << __PRETTY_FUNCTION__ << query << "\n";
     unsigned int st = WrtPerfTracer::tracer()->startTimer();
@@ -116,14 +206,15 @@ bool BookmarksManager::doQuery(QString query) {
     QSqlQuery db_query(m_db);
     bool ok = db_query.exec(query);
     if (!ok) {
-        qDebug() << "BookmarksManager::doQuery" << QString("ERR: %1 %2").arg(db_query.lastError().type()).arg(db_query.lastError().text()) << " Query: " << db_query.lastQuery();
+        qDebug() << "BookmarksManager::doQuery" << QString("ERR: %1 %2").arg(
+                db_query.lastError().type()).arg(db_query.lastError().text())
+                << " Query: " << db_query.lastQuery();
     }
 #ifdef ENABLE_PERF_TRACE
     PERF_DEBUG() << __PRETTY_FUNCTION__ << WrtPerfTracer::tracer()->elapsedTime(st) << "\n";
 #endif
-    return ok;   
+    return ok;
 }
-
 
 /**==============================================================
  * Description: Normalize a given url, if needed.
@@ -149,11 +240,11 @@ int BookmarksManager::addBookmark(QString title, QString URL)
 {
     int bookmarkId = 0;
     
-    if(URL.isEmpty()) {
-       bookmarkId = FAILURE;
+    if (URL.isEmpty()) {
+        bookmarkId = FAILURE;
     }
-    
-    if(bookmarkId != FAILURE) {
+
+    if (bookmarkId != FAILURE) {
         // do some checking on parameters
         QString updatedTitle = title;
         QString updatedUrl = normalizeUrl(URL);
@@ -165,21 +256,21 @@ int BookmarksManager::addBookmark(QString title, QString URL)
             QSqlQuery query(m_db);
             m_db.transaction();
             if (!query.exec("SELECT count(*) from bookmarks")) {
-                lastErrMsg(query);
-                m_db.rollback();
-                return DATABASEERROR;
+                   lastErrMsg(query);
+                   m_db.rollback();
+                   return DATABASEERROR;
             }
             if(query.next()) {
-                query.prepare("UPDATE bookmarks SET sortIndex=sortIndex+1 WHERE sortIndex >= :sIndex");
-                query.bindValue(":sIndex", soIndex);
-                if (!query.exec()) {
-                    lastErrMsg(query);
-                    m_db.rollback();
-                    return DATABASEERROR;
-                 }
-           } 
-           query.prepare("INSERT INTO bookmarks (title, url, sortIndex) "
-                               "VALUES (:title, :url, :sIndex)");
+                   query.prepare("UPDATE bookmarks SET sortIndex=sortIndex+1 WHERE sortIndex >= :sIndex");
+                   query.bindValue(":sIndex", soIndex);
+                   if (!query.exec()) {
+                        lastErrMsg(query);
+                        m_db.rollback();
+                        return DATABASEERROR;
+                   }
+            } 
+            query.prepare("INSERT INTO bookmarks (title, url, sortIndex) "
+                    "VALUES (:title, :url, :sIndex)");
             query.bindValue(":title", QVariant(updatedTitle));
             query.bindValue(":url",    QVariant(updatedUrl));
             query.bindValue(":sIndex",  QVariant(soIndex));
@@ -187,16 +278,16 @@ int BookmarksManager::addBookmark(QString title, QString URL)
                 lastErrMsg(query);
                 m_db.rollback();
                 return DATABASEERROR;
-           }
-           // Note: lastInsertId() is not thread-safe
+            }
+            // Note: lastInsertId() is not thread-safe
             bookmarkId = query.lastInsertId().toInt();
             if (!m_db.commit()) {
                 qDebug() << m_db.lastError().text();
                 m_db.rollback();
-               return DATABASEERROR;
+                return DATABASEERROR;
             }
         } else {
-            bookmarkId = FAILURE;
+              bookmarkId = FAILURE;
         }
       }
     return bookmarkId;
@@ -217,25 +308,28 @@ int BookmarksManager::importBookmarks(QString xbelFilePath)
     XbelReader *reader = new XbelReader(this);
     bool retVal = false;
     
-    if(xbelFilePath.isEmpty() || !QFile::exists(xbelFilePath)) {
-        xbelFilePath = "c:\\data\\temp.xml";
+    if (xbelFilePath.isEmpty() || !QFile::exists(xbelFilePath)) {
+        xbelFilePath = DEFAULT_BOOKMARKS_IMPORT_FILENAME;
         QFile file(xbelFilePath);
-        if(file.exists())
+        if (file.exists())
             file.remove();
         if (!file.open(QIODevice::WriteOnly | QIODevice::Text))
             return false;
-        QTextStream out(&file); 
+        QTextStream out(&file);
         out << defaultBookmarksList;
         out.flush();
         file.close();
-    } 
+    }
     QFile file(xbelFilePath);
-    if(file.exists()) {
+    if (file.exists()) {
         file.open(QIODevice::ReadOnly | QIODevice::Text);
         retVal = reader->read(&file);
         file.close();
     }
-    if(reader)
+    if(QFile::exists(DEFAULT_BOOKMARKS_IMPORT_FILENAME)) {
+        QFile::remove(DEFAULT_BOOKMARKS_IMPORT_FILENAME);
+    }
+    if (reader)
         delete reader;
     return retVal ? SUCCESS : FAILURE;
 }
@@ -254,13 +348,13 @@ int BookmarksManager::exportBookmarks(QString xbelFilePath)
 {
     XbelWriter *writer = new XbelWriter(this);
     bool retVal = false;
-
-    if(xbelFilePath.isEmpty()) {
+    
+    if (xbelFilePath.isEmpty()) {
         xbelFilePath = "c:\\data\\myBookmarks.xml";
-    }  
+    }
 
     QFile file(xbelFilePath);
-    if(file.exists()) {
+    if (file.exists()) {
         file.remove(xbelFilePath);
     }
     file.open(QIODevice::WriteOnly | QIODevice::Text);
@@ -268,7 +362,7 @@ int BookmarksManager::exportBookmarks(QString xbelFilePath)
     file.flush();
     file.close();
     
-    if(writer)
+    if (writer)
         delete writer;
     return retVal ? SUCCESS : FAILURE;
     
@@ -279,29 +373,33 @@ int BookmarksManager::exportBookmarks(QString xbelFilePath)
  * and new title or url, it modifies the existing bookmark.
  * Returns : Success(0) or Failure(-1 or -2).
  ================================================================*/
-int BookmarksManager::modifyBookmark(int origBookmarkId, QString newTitle, QString newURL)
+int BookmarksManager::modifyBookmark(int origBookmarkId, QString newTitle,
+        QString newURL)
 {
     int retVal = SUCCESS;
     
     // Client has to at least pass title or url
-    if(newTitle.isEmpty() && newURL.isEmpty())
-       retVal = FAILURE;
-     
-    if(retVal == SUCCESS) {
+    if (newTitle.isEmpty() && newURL.isEmpty())
+        retVal = FAILURE;
     
-        if (m_db.isOpen()) { 
-              QSqlQuery query(m_db);
+    if (retVal == SUCCESS) {
+        
+        if (m_db.isOpen()) {
+            QSqlQuery query(m_db);
             
-            if(newTitle.isEmpty()) {        
-                query.prepare("UPDATE bookmarks SET url=:newurl WHERE id=:bmId");
+            if (newTitle.isEmpty()) {
+                query.prepare(
+                        "UPDATE bookmarks SET url=:newurl WHERE id=:bmId");
                 query.bindValue(":newurl", normalizeUrl(newURL));
                 query.bindValue(":bmId", origBookmarkId);
-            } else if(newURL.isEmpty()) { 
-                query.prepare("UPDATE bookmarks SET title=:newTitle WHERE id=:bmId");
+            } else if (newURL.isEmpty()) {
+                query.prepare(
+                        "UPDATE bookmarks SET title=:newTitle WHERE id=:bmId");
                 query.bindValue(":newTitle", newTitle);
                 query.bindValue(":bmId", origBookmarkId);
             } else {
-                query.prepare("UPDATE bookmarks SET url=:newurl, title=:newTitle WHERE id=:bmId");
+                query.prepare(
+                        "UPDATE bookmarks SET url=:newurl, title=:newTitle WHERE id=:bmId");
                 query.bindValue(":newurl", normalizeUrl(newURL));
                 query.bindValue(":newTitle", newTitle);
                 query.bindValue(":bmId", origBookmarkId);
@@ -309,13 +407,13 @@ int BookmarksManager::modifyBookmark(int origBookmarkId, QString newTitle, QStri
             if (!query.exec()) {
                 lastErrMsg(query);
                 return DATABASEERROR;
-            } 
+            }
             if (query.numRowsAffected() == 0) {
                 // No update happened - must be an invalid id
                 // TODO: shall we return some other status
                 retVal = FAILURE;
             }
-        } else 
+        } else
             retVal = FAILURE;
     }
     return retVal;
@@ -328,11 +426,11 @@ int BookmarksManager::modifyBookmark(int origBookmarkId, QString newTitle, QStri
 int BookmarksManager::deleteBookmark(int bookmarkId)
 {
     int retVal = SUCCESS;
-   
-    if (m_db.isOpen()) {      
     
+    if (m_db.isOpen()) {
+        
         QSqlQuery query(m_db);
-         
+        
         // TODO: Need to think about whether we need to get sortIndex and update all the 
         // rows after the deletion or not
 
@@ -347,23 +445,23 @@ int BookmarksManager::deleteBookmark(int bookmarkId)
             m_db.rollback();
             return DATABASEERROR;
         }
-        
+
         query.prepare("DELETE FROM tags WHERE bmid=:bmId");
         query.bindValue(":bmId", bookmarkId);
         if (!query.exec()) {
             lastErrMsg(query);
             m_db.rollback();
             return DATABASEERROR;
-        } 
+        }
         if (!m_db.commit()) {
             qDebug() << m_db.lastError().text();
             m_db.rollback();
             return DATABASEERROR;
-        }         
-    } else 
+        }
+    } else
         retVal = FAILURE;
     
-    return retVal;     
+    return retVal;
 }
 
 /**===================================================================================
@@ -374,32 +472,32 @@ int BookmarksManager::clearAll()
 {
     int retVal = SUCCESS;
     
-    if (m_db.isOpen()) {        
-       QSqlQuery query(m_db);
-           
-       // TODO: check if transaction() has been supported 
-       // by calling hasfeature() function first
-       m_db.transaction();
-       
-       if(!query.exec("DELETE FROM bookmarks")) {  
+    if (m_db.isOpen()) {
+        QSqlQuery query(m_db);
+        
+        // TODO: check if transaction() has been supported 
+        // by calling hasfeature() function first
+        m_db.transaction();
+        
+        if (!query.exec("DELETE FROM bookmarks")) {
             lastErrMsg(query);
             m_db.rollback();
             retVal = DATABASEERROR;
-       } 
-       if (retVal == SUCCESS && !query.exec("DELETE FROM tags")) {
+        }
+        if (retVal == SUCCESS && !query.exec("DELETE FROM tags")) {
             lastErrMsg(query);
             m_db.rollback();
             retVal = DATABASEERROR;
-       } 
-       if (retVal == SUCCESS && !m_db.commit()) {
-           qDebug() << m_db.lastError().text();
-           m_db.rollback();
-           retVal = DATABASEERROR;
-       }
-    } else 
+        }
+        if (retVal == SUCCESS && !m_db.commit()) {
+            qDebug() << m_db.lastError().text();
+            m_db.rollback();
+            retVal = DATABASEERROR;
+        }
+    } else
         retVal = FAILURE;
     
-    return retVal;     
+    return retVal;
 }
 
 /**==============================================================
@@ -409,14 +507,14 @@ int BookmarksManager::clearAll()
 int BookmarksManager::deleteTag(int bookmarkId, QString tagToDelete)
 {
     int retVal = SUCCESS;
- 
-    if(tagToDelete.isEmpty()|| bookmarkId < 0)
-          retVal = FAILURE;
+    
+    if (tagToDelete.isEmpty() || bookmarkId < 0)
+        retVal = FAILURE;
     
     if (retVal == SUCCESS) {
         if (m_db.isOpen()) {
             QSqlQuery query(m_db);
-         
+            
             query.prepare("DELETE FROM tags WHERE bmid=:bmId AND tag=:tag");
             query.bindValue(":bmId", bookmarkId);
             query.bindValue(":tag", tagToDelete);
@@ -424,11 +522,11 @@ int BookmarksManager::deleteTag(int bookmarkId, QString tagToDelete)
                 lastErrMsg(query);
                 retVal = DATABASEERROR;
             }
-        } else 
+        } else
             retVal = FAILURE;
     }
     
-    return retVal;     
+    return retVal;
 }
 
 /**================================================================
@@ -439,23 +537,23 @@ int BookmarksManager::addTag(int bookmarkId, QString tagToAdd)
 {
     int retVal = SUCCESS;
     
-    if(tagToAdd.isEmpty()|| bookmarkId < 0)
-       retVal = FAILURE;
+    if (tagToAdd.isEmpty() || bookmarkId < 0)
+        retVal = FAILURE;
     
-    if(retVal == SUCCESS) {
-        if (m_db.isOpen()) {     
-             QSqlQuery query(m_db);
-             
+    if (retVal == SUCCESS) {
+        if (m_db.isOpen()) {
+            QSqlQuery query(m_db);
+            
             query.prepare("INSERT INTO tags (bmid, tag) "
-                     "VALUES (:id, :tag)");                      
-            query.bindValue(":id",   QVariant(bookmarkId));
-            query.bindValue(":tag",  QVariant(tagToAdd));
+                "VALUES (:id, :tag)");
+            query.bindValue(":id", QVariant(bookmarkId));
+            query.bindValue(":tag", QVariant(tagToAdd));
             
             if (!query.exec()) {
                 lastErrMsg(query);
                 retVal = DATABASEERROR;
-            } 
-        } else 
+            }
+        } else
             retVal = FAILURE;
     }
     
@@ -469,17 +567,18 @@ int BookmarksManager::addTag(int bookmarkId, QString tagToAdd)
  ===============================================================*/
 BookmarkResults *BookmarksManager::findAllBookmarks()
 {
-    BookmarkResults * results = NULL; 
+    BookmarkResults * results = NULL;
     
     QString queryStr = QString("SELECT "
-                               " id, title, url, sortIndex " 
-                               " FROM bookmarks ORDER BY sortIndex");
+        " id, title, url, sortIndex "
+        " FROM bookmarks ORDER BY sortIndex");
     if (m_db.isOpen()) {
         QSqlQuery *query = new QSqlQuery(m_db);
         if (query->exec(queryStr)) {
-             results = new BookmarkResults(query);
+            results = new BookmarkResults(query);
         } else {
-            qDebug() << query->lastError().text() << " Query: " << query->lastQuery();
+            qDebug() << query->lastError().text() << " Query: "
+                    << query->lastQuery();
             results = NULL;
         }
     }
@@ -492,21 +591,21 @@ BookmarkResults *BookmarksManager::findAllBookmarks()
  ===============================================================*/
 TagResults *BookmarksManager::findAllTags()
 {
-    TagResults * results = NULL; 
+    TagResults * results = NULL;
     
     if (m_db.isOpen()) {
         QSqlQuery *query = new QSqlQuery(m_db);
         if (query->exec("SELECT DISTINCT tag FROM tags")) {
             // TODO: do we need javascript hack here like in findAllBookmarks API.
-            results = new TagResults(query); 
+            results = new TagResults(query);
         } else {
-            qDebug() << query->lastError().text() << " Query: " << query->lastQuery();
+            qDebug() << query->lastError().text() << " Query: "
+                    << query->lastQuery();
             results = NULL;
         }
     }
     return results;
 }
-
 
 /**==============================================================
  * Description: Finds all the bookmarks associated with a given
@@ -515,28 +614,28 @@ TagResults *BookmarksManager::findAllTags()
  ===============================================================*/
 BookmarkResults *BookmarksManager::findBookmarksByTag(QString tag)
 {
-    BookmarkResults * results = NULL; 
+    BookmarkResults * results = NULL;
     
     QString queryStr = QString("SELECT "
-                               " id, title, url, sortIndex " 
-                               " FROM bookmarks b JOIN"
-                               " tags t ON b.id=t.bmid WHERE" 
-                               " t.tag=:tag");
-     if (m_db.isOpen()) {
-         QSqlQuery *query = new QSqlQuery(m_db);
-         query->prepare(queryStr);
-         query->bindValue(":tag", tag);
-         if (query->exec()) {
-             // TODO: do we need javascript hack here like in findAllBookmarks API.
-             results = new BookmarkResults(query);
-         } else {
-            qDebug() << query->lastError().text() << " Query: " << query->lastQuery();
+        " id, title, url, sortIndex "
+        " FROM bookmarks b JOIN"
+        " tags t ON b.id=t.bmid WHERE"
+        " t.tag=:tag");
+    if (m_db.isOpen()) {
+        QSqlQuery *query = new QSqlQuery(m_db);
+        query->prepare(queryStr);
+        query->bindValue(":tag", tag);
+        if (query->exec()) {
+            // TODO: do we need javascript hack here like in findAllBookmarks API.
+            results = new BookmarkResults(query);
+        } else {
+            qDebug() << query->lastError().text() << " Query: "
+                    << query->lastQuery();
             results = NULL;
-         }
-     }
-     return results;
+        }
+    }
+    return results;
 }
-
 
 /**==============================================================
  * Description: Finds all the Tags associated with a given
@@ -545,25 +644,26 @@ BookmarkResults *BookmarksManager::findBookmarksByTag(QString tag)
  ===============================================================*/
 TagResults *BookmarksManager::findTagsByBookmark(int bookmarkID)
 {
-     TagResults * results = NULL; 
+    TagResults * results = NULL;
     
-     QString queryStr = QString("SELECT DISTINCT tag "
-                                 " FROM tags t JOIN"
-                                 " bookmarks b ON t.bmid=b.id WHERE" 
-                                 " t.bmid=:id");
-     if (m_db.isOpen()) {
+    QString queryStr = QString("SELECT DISTINCT tag "
+        " FROM tags t JOIN"
+        " bookmarks b ON t.bmid=b.id WHERE"
+        " t.bmid=:id");
+    if (m_db.isOpen()) {
         QSqlQuery *query = new QSqlQuery(m_db);
         query->prepare(queryStr);
         query->bindValue(":id", bookmarkID);
         if (query->exec()) {
             // TODO: do we need javascript hack here like in findAllBookmarks API.
-            results =  new TagResults(query); 
+            results = new TagResults(query);
         } else {
-            qDebug() << query->lastError().text() << " Query: " << query->lastQuery();
+            qDebug() << query->lastError().text() << " Query: "
+                    << query->lastQuery();
             results = NULL;
         }
-     }
-     return results;
+    }
+    return results;
 }
 
 /**==============================================================
@@ -572,28 +672,28 @@ TagResults *BookmarksManager::findTagsByBookmark(int bookmarkID)
  * Returns: A pointer to BookmarkResults object or NULL.
  ===============================================================*/
 BookmarkResults *BookmarksManager::findUntaggedBookmarks()
-{   
-    BookmarkResults * results = NULL; 
-       
-    QString queryStr = QString("SELECT "
-                               " id, title, url, sortIndex " 
-                               " FROM bookmarks b LEFT OUTER JOIN"
-                               " tags t ON b.id=t.bmid WHERE" 
-                               " t.bmid IS NULL ORDER BY sortIndex");
+{
+    BookmarkResults * results = NULL;
     
-    if (m_db.isOpen()) { 
-       QSqlQuery *query = new QSqlQuery(m_db);
-       if (query->exec(queryStr)) {
-           // TODO: do we need javascript hack here like in findAllBookmarks API.
-           results = new BookmarkResults(query);
-       } else {
-           qDebug() << query->lastError().text() << " Query: " << query->lastQuery();
-           results = NULL;
-       }
+    QString queryStr = QString("SELECT "
+        " id, title, url, sortIndex "
+        " FROM bookmarks b LEFT OUTER JOIN"
+        " tags t ON b.id=t.bmid WHERE"
+        " t.bmid IS NULL ORDER BY sortIndex");
+    
+    if (m_db.isOpen()) {
+        QSqlQuery *query = new QSqlQuery(m_db);
+        if (query->exec(queryStr)) {
+            // TODO: do we need javascript hack here like in findAllBookmarks API.
+            results = new BookmarkResults(query);
+        } else {
+            qDebug() << query->lastError().text() << " Query: "
+                    << query->lastQuery();
+            results = NULL;
+        }
     }
     return results;
 }
-
 
 /**==============================================================
  * Description: Reorder bookmarks. Moves a given bookmark to a 
@@ -601,8 +701,8 @@ BookmarkResults *BookmarksManager::findUntaggedBookmarks()
  * Returns: SUCCESS(0) or FAILURE (-1 or -2)
  ===============================================================*/
 int BookmarksManager::reorderBookmark(int bookmarkID, int newIndex)
-{   
-    if (newIndex <= 0) 
+{
+    if (newIndex <= 0)
         return FAILURE;
 
     if (!m_db.isOpen())
@@ -659,15 +759,16 @@ BookmarkFav* BookmarksManager::findBookmark(int bookmarkId)
 {
     BookmarkFav * results = NULL;
     
-  
-    if (m_db.isOpen()) { 
-        QSqlQuery query(m_db);  
-        query.prepare("SELECT title, url, sortIndex FROM bookmarks WHERE id=:id");
+    if (m_db.isOpen()) {
+        QSqlQuery query(m_db);
+        query.prepare(
+                "SELECT title, url, sortIndex FROM bookmarks WHERE id=:id");
         query.bindValue(":id", bookmarkId);
         if (query.exec()) {
-            if (query.next()) 
-                results = new BookmarkFav(bookmarkId, query.value(0).toString(),
-                         query.value(1).toString(), query.value(2).toInt()); 
+            if (query.next())
+                results = new BookmarkFav(bookmarkId,
+                        query.value(0).toString(), query.value(1).toString(),
+                        query.value(2).toInt());
         } else {
             lastErrMsg(query);
         }
@@ -704,8 +805,10 @@ QMap<QString, QString> BookmarksManager::findBookmarks(QString atitle)
  * Description: Prints a last error message from the query.
  * Returns: Nothing.
  ===============================================================*/
-void BookmarksManager::lastErrMsg(QSqlQuery& query) 
+void BookmarksManager::lastErrMsg(QSqlQuery& query)
 {
-    qDebug() << "BookmarksManager::lastErrMsg" << QString("ERR: %1 %2").arg(query.lastError().type()).arg(query.lastError().text()) << " Query: " << query.lastQuery();
+    qDebug() << "BookmarksManager::lastErrMsg" << QString("ERR: %1 %2").arg(
+            query.lastError().type()).arg(query.lastError().text())
+            << " Query: " << query.lastQuery();
 }
 

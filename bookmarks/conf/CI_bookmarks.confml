@@ -72,12 +72,12 @@
                 <URL>http://geocaching.hu/wap</URL>
             </CustomerBookmarkItem>
             <CustomerBookmarkItem>
-                <Name>Test sites</Name>
-                <URL></URL>
-            </CustomerBookmarkItem>
-            <CustomerBookmarkItem>
                 <Name>DDT</Name>
                 <URL>http://ammo.factory.cellulardata.com:8000/ddt</URL>
+            </CustomerBookmarkItem>
+            <CustomerBookmarkItem>
+                <Name>Browser 8x NFT</Name>
+                <URL>http://iop1.nokia-boston.com/index.html</URL>
             </CustomerBookmarkItem>
             <CustomerBookmarkItem>
                 <Name>DDT (no cookies)</Name>
@@ -102,7 +102,6 @@
             <NokiaBookmarkItem extensionPolicy="append">
                 <Name>User agent</Name>
                 <URL>http://testsuite.nokia-boston.com/content/wml_ua/wmlheader.asp</URL>
-                <Tag1>Tag1</Tag1>
             </NokiaBookmarkItem>
             <NokiaBookmarkItem>
                 <Name>Google</Name>
@@ -124,14 +123,6 @@
             <NokiaBookmarkItem>
                 <Name>OSS Browser Report</Name>
                 <URL>http://waplabdc.nokia-boston.com/browser/users/OSSBrowser/errorEmail/error.asp</URL>
-            </NokiaBookmarkItem>
-            <NokiaBookmarkItem>
-                <Name>Google</Name>
-                <URL>Http://www.google.com</URL>
-            </NokiaBookmarkItem>
-            <NokiaBookmarkItem>
-                <Name/>
-                <URL/>
             </NokiaBookmarkItem>
             <ThirdPartyBookmarkItem extensionPolicy="append">
                 <Name>XHTML -IOP</Name>

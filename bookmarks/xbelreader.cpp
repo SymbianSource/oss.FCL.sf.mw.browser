@@ -141,7 +141,7 @@ void XbelReader::readBookmark(QList<QString>& parentFolders)
     }
 
     int bmID = m_bmgr->addBookmark(title, url);
-    if (bmID > 0) {
+    if (bmID > 0 && tags.size() > 0) {
         QList<QString>::iterator iter;
         for (iter = tags.begin(); iter != tags.end(); ++iter)
             m_bmgr->addTag(bmID, *iter);
@@ -191,9 +191,10 @@ void XbelReader::readMetadata(QList<QString>& tags, QString &owner)
 void XbelReader::readTags(QList<QString>& tags) 
 {
     while(m_xml->readNextStartElement()) {
-        if(m_xml->name() == "tag") 
-            tags.append(m_xml->readElementText());
-        else
+        if(m_xml->name() == "tag") {
+            QString tag = m_xml->readElementText();
+            tags.append(tag);
+        } else
             m_xml->skipCurrentElement();
     }
 

@@ -47,9 +47,16 @@ public:
             FAILURE = -2
     };
     
-    BookmarksManager(QWidget *parent = 0);
-    ~BookmarksManager();
+public: 
+    static BookmarksManager* instance();
 
+public:
+    virtual ~BookmarksManager();
+
+public: // static functions
+    static bool createFile(QString filename, QString fileContents);
+    static void deleteFile(QString filename);
+   
 public slots:
     int addBookmark(QString title, QString URL);
     int modifyBookmark(int origBookmarkId, QString newTitle, QString newURl);
@@ -60,22 +67,32 @@ public slots:
     BookmarkResults *findAllBookmarks();
     TagResults *findAllTags();
     BookmarkResults *findBookmarksByTag(QString tag);
+    bool needsImport() { return m_needsImport; }
     int importBookmarks(QString xbelFilePath);
+    int importDefaultBookmarks();
     int exportBookmarks(QString xbelFilePath);
     BookmarkFav* findBookmark(int bookmarkId);
     BookmarkResults *findUntaggedBookmarks();
     int reorderBookmark(int bookmarkID, int newIndex);
     TagResults* findTagsByBookmark(int bookmarkID);
-		QMap<QString, QString> findBookmarks(QString atitle);   
- 
+    QMap<QString, QString> findBookmarks(QString atitle);
+    
  private:
+    BookmarksManager(QWidget *parent = 0);
     bool doQuery(QString query);
+    bool doesTableExist(QString tableName);
     void createBookmarksSchema();
     QString normalizeUrl(const QString& url);
     void lastErrMsg(QSqlQuery& query);
 
+    bool m_needsImport;
     QSqlDatabase  m_db;
     // Note: One instance of a query was locking the database even after using finish() and clear()
     //QSqlQuery*    m_query;
 };
+
+#ifndef B_Mgr
+#define B_Mgr BookmarksManager::instance();
+#endif
+
 #endif //BOOKMARKSMANAGER_H

@@ -8,14 +8,12 @@
 #ifndef TAGRESULTS_H_
 #define TAGRESULTS_H_
 
-#include <QString>
-#include <QObject>
-#include <QSqlDatabase>
-#include <QSqlQuery>
-#include <QSqlError>
 #include <QWidget>
+#include <QString>
 
 #include "bookmarksapi.h"
+
+class QSqlQuery;
 
 class BOOKMARKSAPI_EXPORT TagResults : public QObject {
 

@@ -121,14 +121,11 @@ Q_OBJECT
 BOOKMARKSCLIENT_PRIVATE(BrowserContent)
 public:
 
-    BrowserContent(QString aClientName);
+    BrowserContent(QString aClientName); //used for test purposes only
+    BrowserContent(QString aClientName, QString databaseName);
     ~BrowserContent();
-    int addBookmark(BookmarkLeaf* BookmarkContent);
-    int deleteBookmark(QString title);
     QList<BookmarkLeaf*> fetchAllBookmarks();
     QList<BookmarkLeaf*> suggestBookMarks(QString atitle);
-    int reorderBokmarks(QString title,int new_index);
-	int modifyBookmark(QString aOrgTitle, QString aNewTitle, QString aNewUrl);
 	QObjectList suggestContent(QString atitle);
 
     int addHistory(HistoryLeaf* HistoryContent);
@@ -142,7 +139,7 @@ public:
     QMap<QString, QString> findSimilarHistoryItems(QString atitle);
 
 private:
-  int createDatabase();
+  int createDatabase(QString location);
   QString filterUrl(QString atitle);
   QString findFolderForDate( QDate& nodeDate);
   bool dateInThisMonth(QDate &date);

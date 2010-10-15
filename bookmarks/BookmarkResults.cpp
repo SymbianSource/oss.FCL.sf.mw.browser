@@ -7,7 +7,6 @@
 
 #include <QString>
 #include <QObject>
-#include <QSqlDatabase>
 #include <QSqlQuery>
 #include <QSqlError>
 #include <QWidget>
